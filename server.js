@@ -113,36 +113,51 @@ app.post('/api/register', async (req, res) => {
 app.post('/api/login', (req, res) => {
   const { email, password } = req.body;
 
-  db.query('SELECT * FROM users WHERE email = ?', [email], async (err, results) => {
-    if (err || results.length === 0)
-      return res.status(401).json({ message: 'Email không tồn tại' });
+  console.log('📩 Email nhận từ client:', email);
 
-    const user = results[0];
+  db.query(
+    'SELECT * FROM users WHERE email = ?',
+    [email],
+    async (err, results) => {
 
-    // 🚫 Kiểm tra trạng thái tài khoản
-    if (user.status === 'inactive') {
-      return res.status(403).json({ message: 'Tài khoản đã bị ngưng hoạt động, vui lòng liên hệ quản trị viên' });
+      console.log('❗ DB error:', err);
+      console.log('📦 Query results:', results);
+
+      if (err)
+        return res.status(500).json({ message: 'Lỗi server' });
+
+      if (results.length === 0)
+        return res.status(401).json({ message: 'Email không tồn tại' });
+
+      const user = results[0];
+
+      if (user.status === 'inactive') {
+        return res.status(403).json({
+          message: 'Tài khoản đã bị ngưng hoạt động'
+        });
+      }
+
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch)
+        return res.status(401).json({ message: 'Sai mật khẩu' });
+
+      const token = jwt.sign(
+        { id: user.id, role: user.role },
+        JWT_SECRET,
+        { expiresIn: '1h' }
+      );
+
+      res.json({
+        token,
+        id: user.id,
+        role: user.role,
+        name: user.name,
+        email: user.email
+      });
     }
-
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch)
-      return res.status(401).json({ message: 'Sai mật khẩu' });
-
-    const token = jwt.sign(
-      { id: user.id, role: user.role },
-      JWT_SECRET,
-      { expiresIn: '1h' }
-    );
-
-    res.json({
-      token,
-      id: user.id,
-      role: user.role,
-      name: user.name,
-      email: user.email
-    });
-  });
+  );
 });
+
 
 // tạo admin mặc định nếu chưa có
 const createAdminAccount = async () => {
