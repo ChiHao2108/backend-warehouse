@@ -112,7 +112,6 @@ app.post('/api/register', async (req, res) => {
 // ✅ API Đăng nhập 
 app.post('/api/login', (req, res) => {
   const { email, password } = req.body;
-
   console.log('📩 Email nhận từ client:', email);
 
   db.query(
@@ -120,40 +119,51 @@ app.post('/api/login', (req, res) => {
     [email],
     async (err, results) => {
 
-      console.log('❗ DB error:', err);
-      console.log('📦 Query results:', results);
+      try {
+        console.log('❗ DB error:', err);
+        console.log('📦 Query results:', results);
 
-      if (err)
-        return res.status(500).json({ message: 'Lỗi server' });
+        if (err) {
+          return res.status(500).json({ message: 'Lỗi server' });
+        }
 
-      if (results.length === 0)
-        return res.status(401).json({ message: 'Email không tồn tại' });
+        if (!results || results.length === 0) {
+          return res.status(401).json({ message: 'Email không tồn tại' });
+        }
 
-      const user = results[0];
+        const user = results[0];
 
-      if (user.status === 'inactive') {
-        return res.status(403).json({
-          message: 'Tài khoản đã bị ngưng hoạt động'
+        if (user.status === 'inactive') {
+          return res.status(403).json({
+            message: 'Tài khoản đã bị ngưng hoạt động'
+          });
+        }
+
+        const isMatch = await bcrypt.compare(password, user.password);
+        console.log('🔐 Password match:', isMatch);
+
+        if (!isMatch) {
+          return res.status(401).json({ message: 'Sai mật khẩu' });
+        }
+
+        const token = jwt.sign(
+          { id: user.id, role: user.role },
+          process.env.JWT_SECRET, // ❗ dùng env cho chắc
+          { expiresIn: '1h' }
+        );
+
+        return res.json({
+          token,
+          id: user.id,
+          role: user.role,
+          name: user.name,
+          email: user.email
         });
+
+      } catch (error) {
+        console.error('🔥 LOGIN ERROR:', error);
+        return res.status(500).json({ message: 'Lỗi server' });
       }
-
-      const isMatch = await bcrypt.compare(password, user.password);
-      if (!isMatch)
-        return res.status(401).json({ message: 'Sai mật khẩu' });
-
-      const token = jwt.sign(
-        { id: user.id, role: user.role },
-        JWT_SECRET,
-        { expiresIn: '1h' }
-      );
-
-      res.json({
-        token,
-        id: user.id,
-        role: user.role,
-        name: user.name,
-        email: user.email
-      });
     }
   );
 });
